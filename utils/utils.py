@@ -68,3 +68,37 @@ class Youtube:
         """Суммирует количество подписчиков"""
         if isinstance(other, Youtube):
             return int(self.subscriber_count) + int(other.subscriber_count)
+
+
+class Video:
+    def __init__(self, video_id):
+        """Инициализация атрибутов класса"""
+        self.video_id = video_id
+        # получение обьекта для работы с API из класса Youtube
+        self.youtube = Youtube.get_service()
+        self.video = self.youtube.videos().list(id=self.video_id, part='snippet,statistics').execute()
+        # название видео
+        self.video_title = self.video['items'][0]['snippet']['title']
+        # количество просмотров
+        self.view_count = self.video['items'][0]['statistics']['viewCount']
+        # количество лайков
+        self.like_count = self.video['items'][0]['statistics']['likeCount']
+
+    def __str__(self) -> str:
+        """Возвращает информацию о видео (название видео)"""
+        return self.video_title
+
+
+class PLVideo(Video):
+    def __init__(self, video_id, playlist_id):
+        """Инициализация атрибутов класса"""
+        super().__init__(video_id)
+        self.playlist_id = playlist_id
+
+        self.playlists = self.youtube.playlists().list(id=self.playlist_id, part='snippet').execute()
+        # название видео
+        self.playlist_title = self.playlists['items'][0]['snippet']['title']
+
+    def __str__(self) -> str:
+        """Возвращает информацию о видео (название видео и название плейлиста)"""
+        return f"{self.video_title} ({self.playlist_title})"
