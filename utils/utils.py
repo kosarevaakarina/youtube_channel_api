@@ -1,18 +1,32 @@
+import datetime
 import os
 import json
+import isodate as isodate
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
+from datetime import timedelta
+from abc import ABC, abstractmethod
 
 
-class Youtube:
+class MixinLog(ABC):
+    def __init__(self):
+        """Получение данных о ютуб-канале по его ID и ключу"""
+        load_dotenv()
+        api_key: str = os.getenv('YT_API_KEY')  # получение ключа из файла .env
+        self.youtube = build('youtube', 'v3', developerKey=api_key)
+
+    @abstractmethod
+    def __str__(self):
+        pass
+
+
+class Youtube(MixinLog):
     def __init__(self, channel_id):
         self.__channel_id = channel_id
 
         """Получение данных о ютуб-канале по его ID и ключу"""
-        load_dotenv()
-        api_key: str = os.getenv('YT_API_KEY')  # получение ключа из файла .env
-        youtube = build('youtube', 'v3', developerKey=api_key)
-        self.channel = youtube.channels().list(id=self.__channel_id, part='snippet,statistics').execute()
+        super().__init__()
+        self.channel = self.youtube.channels().list(id=self.__channel_id, part='snippet,statistics').execute()
 
         """Инициализация атрибутов класса"""
         # название канала
@@ -70,12 +84,12 @@ class Youtube:
             return int(self.subscriber_count) + int(other.subscriber_count)
 
 
-class Video:
+class Video(MixinLog):
     def __init__(self, video_id):
         """Инициализация атрибутов класса"""
         self.video_id = video_id
         # получение обьекта для работы с API из класса Youtube
-        self.youtube = Youtube.get_service()
+        super().__init__()
         self.video = self.youtube.videos().list(id=self.video_id, part='snippet,statistics').execute()
         # название видео
         self.video_title = self.video['items'][0]['snippet']['title']
@@ -102,3 +116,53 @@ class PLVideo(Video):
     def __str__(self) -> str:
         """Возвращает информацию о видео (название видео и название плейлиста)"""
         return f"{self.video_title} ({self.playlist_title})"
+
+
+class PlayList(MixinLog):
+    """Обработка данных плейлиста"""
+
+    def __init__(self, playlist_id):
+        self.playlist_id = playlist_id
+        """Получение данных о плейлисте по ID и ключу ютуб-канала"""
+        super().__init__()
+
+        self.playlists_data = self.youtube.playlists().list(id=self.playlist_id, part='snippet').execute()
+        self.playlist_videos = self.youtube.playlistItems().list(playlistId=self.playlist_id, part='contentDetails',
+                                                                 maxResults=50).execute()
+        # название плейлиста
+        self.playlist_title = self.playlists_data['items'][0]['snippet']['title']
+        # url плейлиста
+        self.playlist_url = f"https://www.youtube.com/playlist?list={self.playlist_id}"
+
+    @property
+    def total_duration(self) -> datetime.timedelta:
+        """Возвращает суммарную длительность плейлиста """
+        video_ids: list[str] = [video['contentDetails']['videoId'] for video in self.playlist_videos['items']]
+
+        video_response = self.youtube.videos().list(part='contentDetails, statistics',
+                                                    id=','.join(video_ids)
+                                                    ).execute()
+        total_duration = timedelta()
+        for video in video_response['items']:
+            iso_8601_duration = video['contentDetails']['duration']
+            duration = isodate.parse_duration(iso_8601_duration)
+            total_duration += duration
+        return total_duration
+
+    def show_best_video(self) -> str:
+        """Возвращает ссылку на самое популярное видео из плейлиста (по количеству лайков)"""
+        video_ids: list[str] = [video['contentDetails']['videoId'] for video in self.playlist_videos['items']]
+        video_response = self.youtube.videos().list(part='snippet,statistics', id=','.join(video_ids)).execute()
+
+        best_video = None
+        max_likes = 0
+        for video in video_response['items']:
+            if isinstance(int(video['statistics']['likeCount']), int):
+                if int(video['statistics']['likeCount']) > max_likes:
+                    best_video = video
+                    max_likes = int(video['statistics']['likeCount'])
+        return f'https://youtu.be/{best_video["id"]}'
+
+    def __str__(self) -> str:
+        """Возвращает информацию о плейлисте (название и ссылку на плейлист)"""
+        return f'{self.playlist_title} - {self.playlist_url}'
