@@ -91,16 +91,26 @@ class Video(MixinLog):
         # получение обьекта для работы с API из класса Youtube
         super().__init__()
         self.video = self.youtube.videos().list(id=self.video_id, part='snippet,statistics').execute()
-        # название видео
-        self.video_title = self.video['items'][0]['snippet']['title']
-        # количество просмотров
-        self.view_count = self.video['items'][0]['statistics']['viewCount']
-        # количество лайков
-        self.like_count = self.video['items'][0]['statistics']['likeCount']
+        try:
+            if self.video['items']:
+                # название видео
+                self.video_title = self.video['items'][0]['snippet']['title']
+                # количество просмотров
+                self.view_count = self.video['items'][0]['statistics']['viewCount']
+                # количество лайков
+                self.like_count = self.video['items'][0]['statistics']['likeCount']
+
+            else:
+                self.video_title = None
+                self.view_count = None
+                self.like_count = None
+                raise TypeError
+        except TypeError:
+            pass
 
     def __str__(self) -> str:
         """Возвращает информацию о видео (название видео)"""
-        return self.video_title
+        # return self.video_title
 
 
 class PLVideo(Video):
